@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
-import bcrypt from 'bcryptjs';
 
 const app = express();
 app.use(cors());
@@ -22,7 +21,7 @@ app.get('/api/v1/health', (_req: any, res: any) => {
 app.get('/api/v1/dbping', async (_req: any, res: any) => {
   try {
     const supabase = getSupabase();
-    const { data, error, count } = await supabase.from('users').select('*', { count: 'exact', head: true });
+    const { error, count } = await supabase.from('users').select('*', { count: 'exact', head: true });
     if (error) throw error;
     res.json({ status: 'connected', userCount: count ?? 0 });
   } catch (err: any) {
@@ -48,11 +47,10 @@ app.post('/api/v1/seed', async (_req: any, res: any) => {
     if (count && count > 0) {
       return res.json({ status: 'skipped', reason: 'Users already exist', count });
     }
-    const hash = bcrypt.hashSync('admin123', 10);
     const { error } = await supabase.from('users').insert({
       id: crypto.randomUUID(),
       username: 'admin',
-      password_hash: hash,
+      password_hash: '$2b$10$WyPGxyEUFociEtKwThwB2egpQgSpN1cOSQ9B74HkpVuW9cFhW0zO6',
       name: 'System Admin',
       role: 'admin',
       active: true,
