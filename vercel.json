@@ -1,7 +1,7 @@
 {
   "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/dist",
-  "installCommand": "cd backend && npm install && npx prisma generate",
+  "installCommand": "cd backend && npm install && npx prisma generate && npx prisma migrate deploy",
   "functions": {
     "api/index.ts": {
       "memory": 256,
