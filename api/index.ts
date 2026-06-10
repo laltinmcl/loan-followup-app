@@ -47,12 +47,11 @@ app.post('/api/v1/seed', async (_req: any, res: any) => {
     if (count && count > 0) {
       return res.json({ status: 'skipped', reason: 'Users already exist', count });
     }
-    const bcrypt = await import('bcryptjs');
-    const hash = await bcrypt.default.hash('admin123', 10);
+    const password_hash = crypto.createHash('sha256').update('admin123').digest('hex');
     const { error } = await supabase.from('users').insert({
       id: crypto.randomUUID(),
       username: 'admin',
-      password_hash: hash,
+      password_hash,
       name: 'System Admin',
       role: 'admin',
       active: true,
