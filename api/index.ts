@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 
 const app = express();
 app.use(cors());
@@ -20,9 +21,9 @@ app.get('/api/v1/health', (_req: any, res: any) => {
 app.get('/api/v1/dbping', async (_req: any, res: any) => {
   try {
     const supabase = getSupabase();
-    const { data, error } = await supabase.from('users').select('count()', { count: 'exact', head: true });
+    const { data, error, count } = await supabase.from('users').select('*', { count: 'exact', head: true });
     if (error) throw error;
-    res.json({ status: 'connected', userCount: data?.length ?? 0 });
+    res.json({ status: 'connected', userCount: count ?? 0 });
   } catch (err: any) {
     res.status(500).json({ status: 'error', message: err.message, code: err.code });
   }
@@ -34,6 +35,30 @@ app.post('/api/v1/migrate', async (_req: any, res: any) => {
     const { count, error } = await supabase.from('users').select('*', { count: 'exact', head: true });
     if (error) throw error;
     res.json({ status: 'skipped', reason: 'Tables already exist', userCount: count });
+  } catch (err: any) {
+    res.status(500).json({ status: 'error', message: err.message, code: err.code });
+  }
+});
+
+app.post('/api/v1/seed', async (_req: any, res: any) => {
+  try {
+    const supabase = getSupabase();
+    const { count } = await supabase.from('users').select('*', { count: 'exact', head: true });
+    if (count && count > 0) {
+      return res.json({ status: 'skipped', reason: 'Users already exist', count });
+    }
+    const bcrypt = await import('bcryptjs');
+    const hash = await bcrypt.default.hash('admin123', 10);
+    const { error } = await supabase.from('users').insert({
+      id: crypto.randomUUID(),
+      username: 'admin',
+      password_hash: hash,
+      name: 'System Admin',
+      role: 'admin',
+      active: true,
+    });
+    if (error) throw error;
+    res.json({ status: 'success', message: 'Admin user created (username: admin, password: admin123)' });
   } catch (err: any) {
     res.status(500).json({ status: 'error', message: err.message, code: err.code });
   }
