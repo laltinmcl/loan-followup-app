@@ -176,7 +176,7 @@ app.patch('/api/v1/loans/:id', authMiddleware, async (req: any, res: any) => {
     const { data, error } = await supabase.from('loans').update(req.body).eq('id', req.params.id).select().single();
     if (error) throw error;
     await supabase.from('activity_log').insert({
-      loan_id: req.params.id, action: 'loan_updated', description: 'Loan details updated',
+      id: crypto.randomUUID(), loan_id: req.params.id, action: 'loan_updated', description: 'Loan details updated',
       created_by: req.user.id, metadata: { changes: Object.keys(req.body) },
     });
     res.json(data);
@@ -235,7 +235,7 @@ app.post('/api/v1/stages/:loanId/transition', authMiddleware, async (req: any, r
     if (!allowed.includes(toStage)) return res.status(400).json({ error: `Cannot transition from '${stage.current_stage}' to '${toStage}'` });
     const { data: updated } = await supabase.from('followup_stages').update({ current_stage: toStage, stage_entered_at: new Date().toISOString(), notes: note || undefined }).eq('loan_id', req.params.loanId).select().single();
     await supabase.from('stage_history').insert({
-      stage_id: stage.id, from_stage: stage.current_stage, to_stage: toStage,
+      id: crypto.randomUUID(), stage_id: stage.id, from_stage: stage.current_stage, to_stage: toStage,
       transitioned_by: req.user.id, note: note || null,
     });
     res.json(updated);
@@ -265,10 +265,10 @@ app.get('/api/v1/visits', authMiddleware, async (req: any, res: any) => {
 app.post('/api/v1/visits', authMiddleware, async (req: any, res: any) => {
   try {
     const supabase = getSupabase();
-    const { data, error } = await supabase.from('field_visits').insert({ ...req.body, created_by: req.user.id }).select().single();
+    const { data, error } = await supabase.from('field_visits').insert({ id: crypto.randomUUID(), ...req.body, created_by: req.user.id }).select().single();
     if (error) throw error;
     await supabase.from('activity_log').insert({
-      loan_id: data.loan_id, action: 'field_visit_created', description: `Field visit logged: ${data.status}`, created_by: req.user.id,
+      id: crypto.randomUUID(), loan_id: data.loan_id, action: 'field_visit_created', description: `Field visit logged: ${data.status}`, created_by: req.user.id,
     });
     res.status(201).json(data);
   } catch (err: any) {
@@ -282,7 +282,7 @@ app.post('/api/v1/visits/sync', authMiddleware, async (req: any, res: any) => {
     const visits = req.body.visits || [];
     let synced = 0;
     for (const v of visits) {
-      const { error } = await supabase.from('field_visits').insert({ ...v, synced: true, synced_at: new Date().toISOString(), created_by: req.user.id });
+      const { error } = await supabase.from('field_visits').insert({ id: v.id || crypto.randomUUID(), ...v, synced: true, synced_at: new Date().toISOString(), created_by: req.user.id });
       if (!error) synced++;
     }
     res.status(201).json({ synced });
@@ -311,7 +311,7 @@ app.get('/api/v1/reminders', authMiddleware, async (req: any, res: any) => {
 app.post('/api/v1/reminders', authMiddleware, async (req: any, res: any) => {
   try {
     const supabase = getSupabase();
-    const { data, error } = await supabase.from('reminders').insert({ ...req.body, created_by: req.user.id }).select().single();
+    const { data, error } = await supabase.from('reminders').insert({ id: crypto.randomUUID(), ...req.body, created_by: req.user.id }).select().single();
     if (error) throw error;
     res.status(201).json(data);
   } catch (err: any) {
@@ -353,7 +353,7 @@ app.post('/api/v1/import', authMiddleware, upload.single('file'), async (req: an
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     const supabase = getSupabase();
     const { data, error } = await supabase.from('import_jobs').insert({
-      filename: req.file.originalname, file_path: req.file.path, status: 'pending', created_by: req.user.id,
+      id: crypto.randomUUID(), filename: req.file.originalname, file_path: req.file.path, status: 'pending', created_by: req.user.id,
     }).select().single();
     if (error) throw error;
     res.status(201).json({ jobId: data.id, status: 'pending', message: 'File queued for import' });
