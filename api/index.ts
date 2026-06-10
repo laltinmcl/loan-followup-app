@@ -12,6 +12,20 @@ app.get('/api/v1/health', (_req: any, res: any) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+app.get('/api/v1/dbping', async (_req: any, res: any) => {
+  let client: any = null;
+  try {
+    client = new Client({ connectionString: process.env.DIRECT_URL || process.env.DATABASE_URL });
+    await client.connect();
+    const result = await client.query('SELECT version()');
+    await client.end();
+    res.json({ status: 'connected', version: result.rows[0].version });
+  } catch (err: any) {
+    try { await client?.end(); } catch {}
+    res.status(500).json({ status: 'error', message: err.message, code: err.code });
+  }
+});
+
 app.post('/api/v1/migrate', async (_req: any, res: any) => {
   let client: any = null;
   try {
