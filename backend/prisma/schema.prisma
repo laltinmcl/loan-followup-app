@@ -1,0 +1,201 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  username     String   @unique @db.VarChar(50)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  name         String   @db.VarChar(200)
+  role         String   @default("staff") @db.VarChar(20)
+  phone        String?  @db.VarChar(20)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  loansCreated       Loan[]            @relation("LoanCreatedBy")
+  followupAssign     FollowupStage[]   @relation("FollowupAssignedTo")
+  stageHistory       StageHistory[]    @relation("StageTransitionedBy")
+  visits             FieldVisit[]      @relation("VisitCreatedBy")
+  reminders          Reminder[]        @relation("ReminderCreatedBy")
+  activityLogs       ActivityLog[]     @relation("ActivityCreatedBy")
+  importJobs         ImportJob[]       @relation("ImportCreatedBy")
+  notifications      Notification[]
+
+  @@map("users")
+}
+
+model Loan {
+  id               String   @id @default(uuid()) @db.Uuid
+  accountNo        String   @unique @map("account_no") @db.VarChar(20)
+  memberName       String   @map("member_name") @db.VarChar(200)
+  memberCode       String?  @map("member_code") @db.VarChar(20)
+  loanCategory     String   @map("loan_category") @db.VarChar(50)
+  loanTypeCode     Int?     @map("loan_type_code")
+  disburseAmount   Decimal  @default(0) @map("disburse_amount") @db.Decimal(15, 2)
+  principalDue     Decimal  @default(0) @map("principal_due") @db.Decimal(15, 2)
+  dueCount         Int      @default(0) @map("due_count")
+  interestTotal    Decimal  @default(0) @map("interest_total") @db.Decimal(15, 2)
+  loanLimit        Decimal  @default(0) @map("loan_limit") @db.Decimal(15, 2)
+  outstandingAmount Decimal @default(0) @map("outstanding_amount") @db.Decimal(15, 2)
+  totalDue         Decimal? @map("total_due") @db.Decimal(15, 2)
+  mobileNo         String?  @map("mobile_no") @db.VarChar(100)
+  guarantorInfo    String?  @map("guarantor_info") @db.Text
+  loanExpiryDate   DateTime? @map("loan_expiry_date") @db.Date
+  status           String   @default("active") @db.VarChar(20)
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  createdBy    String? @map("created_by") @db.Uuid
+  createdByRel User?   @relation("LoanCreatedBy", fields: [createdBy], references: [id])
+
+  followupStage  FollowupStage?
+  fieldVisits    FieldVisit[]
+  reminders      Reminder[]
+  activityLogs   ActivityLog[]
+
+  @@index([loanCategory])
+  @@index([status])
+  @@index([loanExpiryDate])
+  @@index([dueCount])
+  @@index([memberName], type: Gin)
+  @@map("loans")
+}
+
+model FollowupStage {
+  id              String   @id @default(uuid()) @db.Uuid
+  loanId          String   @unique @map("loan_id") @db.Uuid
+  currentStage    String   @map("current_stage") @db.VarChar(30)
+  stageEnteredAt  DateTime @default(now()) @map("stage_entered_at")
+  assignedTo      String?  @map("assigned_to") @db.Uuid
+  notes           String?  @db.Text
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  loan       Loan   @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  assignedToRel User? @relation("FollowupAssignedTo", fields: [assignedTo], references: [id])
+
+  stageHistory StageHistory[]
+
+  @@index([currentStage])
+  @@map("followup_stages")
+}
+
+model StageHistory {
+  id              String   @id @default(uuid()) @db.Uuid
+  stageId         String   @map("stage_id") @db.Uuid
+  fromStage       String?  @map("from_stage") @db.VarChar(30)
+  toStage         String   @map("to_stage") @db.VarChar(30)
+  transitionedBy  String?  @map("transitioned_by") @db.Uuid
+  note            String?  @db.Text
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  stage          FollowupStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  transitionedByRel User? @relation("StageTransitionedBy", fields: [transitionedBy], references: [id])
+
+  @@index([createdAt])
+  @@map("stage_history")
+}
+
+model FieldVisit {
+  id               String   @id @default(uuid()) @db.Uuid
+  loanId           String   @map("loan_id") @db.Uuid
+  visitDate        DateTime @map("visit_date") @db.Date
+  latitude         Decimal? @db.Decimal(10, 7)
+  longitude        Decimal? @db.Decimal(10, 7)
+  locationName     String?  @map("location_name") @db.VarChar(200)
+  photos           Json     @default("[]")
+  status           String   @db.VarChar(30)
+  notes            String?  @db.Text
+  paymentCollected Decimal  @default(0) @map("payment_collected") @db.Decimal(15, 2)
+  nextFollowupDate DateTime? @map("next_followup_date") @db.Date
+  synced           Boolean  @default(true)
+  syncedAt         DateTime? @map("synced_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  createdBy    String? @map("created_by") @db.Uuid
+  createdByRel User?   @relation("VisitCreatedBy", fields: [createdBy], references: [id])
+  loan         Loan    @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  @@index([visitDate])
+  @@index([status])
+  @@map("field_visits")
+}
+
+model Reminder {
+  id          String   @id @default(uuid()) @db.Uuid
+  loanId      String?  @map("loan_id") @db.Uuid
+  type        String   @db.VarChar(30)
+  title       String   @db.VarChar(200)
+  description String?  @db.Text
+  dueDate     DateTime @map("due_date") @db.Date
+  completed   Boolean  @default(false)
+  completedAt DateTime? @map("completed_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  createdBy    String? @map("created_by") @db.Uuid
+  createdByRel User?   @relation("ReminderCreatedBy", fields: [createdBy], references: [id])
+  loan         Loan?   @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  @@index([dueDate])
+  @@index([completed])
+  @@map("reminders")
+}
+
+model ActivityLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  loanId      String?  @map("loan_id") @db.Uuid
+  action      String   @db.VarChar(50)
+  description String?  @db.Text
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  createdBy    String? @map("created_by") @db.Uuid
+  createdByRel User?   @relation("ActivityCreatedBy", fields: [createdBy], references: [id])
+  loan         Loan?   @relation(fields: [loanId], references: [id], onDelete: SetNull)
+
+  @@index([action])
+  @@index([createdAt])
+  @@map("activity_log")
+}
+
+model ImportJob {
+  id           String    @id @default(uuid()) @db.Uuid
+  filename     String    @db.VarChar(255)
+  filePath     String?   @map("file_path") @db.VarChar(500)
+  status       String    @default("pending") @db.VarChar(20)
+  totalRows    Int       @default(0) @map("total_rows")
+  successRows  Int       @default(0) @map("success_rows")
+  errorRows    Int       @default(0) @map("error_rows")
+  errorsJson   Json?     @map("errors_json")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  completedAt  DateTime? @map("completed_at")
+
+  createdBy    String? @map("created_by") @db.Uuid
+  createdByRel User?   @relation("ImportCreatedBy", fields: [createdBy], references: [id])
+
+  @@map("import_jobs")
+}
+
+model Notification {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  title         String   @db.VarChar(200)
+  body          String?  @db.Text
+  type          String   @db.VarChar(30)
+  referenceType String?  @map("reference_type") @db.VarChar(30)
+  referenceId   String?  @map("reference_id") @db.Uuid
+  read          Boolean  @default(false)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read, createdAt])
+  @@map("notifications")
+}
