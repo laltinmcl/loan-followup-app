@@ -1,3 +1,4 @@
-export default function handler(_req: any, res: any) {
-  return res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
-}
+const express = require('express');
+const app = express();
+app.get('/api/v1/health', (_req: any, res: any) => res.json({ status: 'ok' }));
+export default app;
