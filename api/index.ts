@@ -62,4 +62,42 @@ app.post('/api/v1/seed', async (_req: any, res: any) => {
   }
 });
 
+app.post('/auth/login', async (req: any, res: any) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('users').select('*').eq('username', username).single();
+    if (error || !data) return res.status(401).json({ error: 'Invalid credentials' });
+    const bcrypt = require('bcryptjs');
+    const valid = bcrypt.compareSync(password, data.password_hash);
+    if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
+    if (!data.active) return res.status(403).json({ error: 'Account disabled' });
+    const jwt = require('jsonwebtoken');
+    const token = jwt.sign(
+      { id: data.id, username: data.username, role: data.role },
+      process.env.JWT_SECRET || 'secret',
+      { expiresIn: '24h' }
+    );
+    res.json({ token, user: { id: data.id, username: data.username, name: data.name, role: data.role } });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Login failed', detail: err.message });
+  }
+});
+
+app.get('/auth/me', async (req: any, res: any) => {
+  try {
+    const auth = req.headers.authorization;
+    if (!auth) return res.status(401).json({ error: 'No token' });
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.verify(auth.replace('Bearer ', ''), process.env.JWT_SECRET || 'secret');
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('users').select('id,username,name,role,phone').eq('id', decoded.id).single();
+    if (error || !data) return res.status(401).json({ error: 'User not found' });
+    res.json(data);
+  } catch (err: any) {
+    res.status(401).json({ error: 'Invalid token' });
+  }
+});
+
 export default app;
