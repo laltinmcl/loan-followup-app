@@ -65,7 +65,7 @@ model Loan {
   @@index([status])
   @@index([loanExpiryDate])
   @@index([dueCount])
-  @@index([memberName], type: Gin)
+  @@index([memberName])
   @@map("loans")
 }
 
