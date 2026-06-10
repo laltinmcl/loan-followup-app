@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
-import { prisma } from '../index';
+import { prisma } from '../db';
 import { authenticate, AuthRequest } from '../middleware/auth';
 
 const upload = multer({

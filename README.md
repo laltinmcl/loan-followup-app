@@ -24,17 +24,19 @@ This system is designed for financial institutions (MFIs, cooperatives, NBFCs) t
 | **Maps** | Leaflet (free, offline-compatible) |
 | **PWA** | Workbox, IndexedDB |
 | **Backend** | Node.js, Express, TypeScript |
-| **Database** | PostgreSQL (via Supabase/Neon) |
 | **ORM** | Prisma |
 | **API** | REST + WebSocket |
 | **Auth** | JWT |
-| **Hosting** | Vercel (frontend) + Railway/Render (backend) |
+| **Hosting** | Vercel (frontend + serverless API) |
+| **Database** | Supabase PostgreSQL |
 
 ## Quick Start
 
+### Local Development
+
 ```bash
 # Clone the repository
-git clone <repo-url>
+git clone https://github.com/laltinmcl/loan-followup-app.git
 cd loan-followup-app
 
 # Install frontend dependencies
@@ -44,10 +46,11 @@ cd frontend && npm install
 cd ../backend && npm install
 
 # Set up environment variables
-cp .env.example .env
+cp backend/.env.example backend/.env
+# Edit backend/.env with your Supabase credentials
 
 # Run database migrations
-npx prisma migrate dev
+cd backend && npx prisma migrate dev
 
 # Start development servers
 # Terminal 1: Backend
@@ -56,6 +59,21 @@ cd backend && npm run dev
 # Terminal 2: Frontend
 cd frontend && npm run dev
 ```
+
+### One-Click Vercel Deploy
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/laltinmcl/loan-followup-app)
+
+**Required environment variables (set in Vercel Dashboard):**
+
+| Variable | Value |
+|----------|-------|
+| `DATABASE_URL` | `postgresql://postgres:Pratibimba%40%23123@db.ixzbppbwwtdfxsztjrhu.supabase.co:5432/postgres` |
+| `DIRECT_URL` | Same as `DATABASE_URL` |
+| `JWT_SECRET` | `your-random-secret-here` |
+| `CORS_ORIGIN` | `https://your-app.vercel.app` |
+
+> ⚠️ URL-encode special chars in password: `@` → `%40`, `#` → `%23`
 
 ## Project Structure
 
@@ -91,8 +109,10 @@ loan-followup-app/
 │   │   ├── utils/                  # Utility functions
 │   │   └── types/                  # TypeScript definitions
 │   └── prisma/                     # Prisma schema + migrations
+├── api/                             # Vercel serverless entry
 ├── shared/                         # Shared types/constants
 ├── package.json
+├── vercel.json                      # Vercel deployment config
 └── CHANGELOG.md
 ```
 

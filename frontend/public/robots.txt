@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://loan-followup.vercel.app/sitemap.xml
