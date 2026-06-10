@@ -4,7 +4,6 @@ dotenv.config();
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { app } from './app';
-import { prisma } from './db';
 
 const httpServer = createServer(app);
 const io = new SocketIOServer(httpServer, {

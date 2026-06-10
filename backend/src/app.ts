@@ -26,14 +26,14 @@ app.get('/api/v1/health', (_req, res) => {
 });
 
 app.post('/api/v1/migrate', async (_req, res) => {
-  const { PrismaClient } = require('@prisma/client');
-  const prisma = new PrismaClient();
+  // Use raw pg to avoid Prisma engine EROFS on serverless
   try {
-    const tables = await prisma.$queryRawUnsafe<Array<{ tablename: string }>>(
-      `SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public' AND tablename = 'users'`
-    );
-    if (tables.length > 0) {
-      await prisma.$disconnect();
+    const { Client } = require('pg');
+    const client = new Client({ connectionString: process.env.DIRECT_URL || process.env.DATABASE_URL });
+    await client.connect();
+    const result = await client.query(`SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public' AND tablename = 'users'`);
+    if (result.rows.length > 0) {
+      await client.end();
       return res.json({ status: 'skipped', reason: 'Tables already exist' });
     }
     const paths = [
@@ -46,17 +46,13 @@ app.post('/api/v1/migrate', async (_req, res) => {
       if (existsSync(p)) { sql = readFileSync(p, 'utf-8'); break; }
     }
     if (!sql) {
-      await prisma.$disconnect();
+      await client.end();
       return res.status(500).json({ status: 'error', reason: 'Migration SQL not found', searched: paths });
     }
-    const statements = sql.split(';').filter((s: string) => s.trim().length > 0);
-    for (const stmt of statements) {
-      await prisma.$executeRawUnsafe(stmt + ';');
-    }
-    await prisma.$disconnect();
-    res.json({ status: 'success', tablesCreated: statements.filter((s: string) => s.trim().toUpperCase().startsWith('CREATE TABLE')).length });
+    await client.query(sql);
+    await client.end();
+    res.json({ status: 'success', message: 'All tables created' });
   } catch (err) {
-    await prisma.$disconnect().catch(() => {});
     res.status(500).json({ status: 'error', message: (err as Error).message });
   }
 });
