@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 
 const app = express();
 app.use(cors());
@@ -47,11 +48,11 @@ app.post('/api/v1/seed', async (_req: any, res: any) => {
     if (count && count > 0) {
       return res.json({ status: 'skipped', reason: 'Users already exist', count });
     }
-    const password_hash = crypto.createHash('sha256').update('admin123').digest('hex');
+    const hash = bcrypt.hashSync('admin123', 10);
     const { error } = await supabase.from('users').insert({
       id: crypto.randomUUID(),
       username: 'admin',
-      password_hash,
+      password_hash: hash,
       name: 'System Admin',
       role: 'admin',
       active: true,
