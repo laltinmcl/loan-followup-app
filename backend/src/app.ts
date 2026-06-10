@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
 
 const app = express();
 
@@ -21,6 +23,42 @@ app.get('/api/v1/health', (_req, res) => {
     uptime: process.uptime(),
     db: 'connected',
   });
+});
+
+app.post('/api/v1/migrate', async (_req, res) => {
+  const { PrismaClient } = require('@prisma/client');
+  const prisma = new PrismaClient();
+  try {
+    const tables = await prisma.$queryRawUnsafe<Array<{ tablename: string }>>(
+      `SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public' AND tablename = 'users'`
+    );
+    if (tables.length > 0) {
+      await prisma.$disconnect();
+      return res.json({ status: 'skipped', reason: 'Tables already exist' });
+    }
+    const paths = [
+      join(__dirname, '..', '..', 'prisma', 'migrations', '0001_init', 'migration.sql'),
+      join(__dirname, '..', '..', '..', 'backend', 'prisma', 'migrations', '0001_init', 'migration.sql'),
+      join('/var/task', 'backend', 'prisma', 'migrations', '0001_init', 'migration.sql'),
+    ];
+    let sql = '';
+    for (const p of paths) {
+      if (existsSync(p)) { sql = readFileSync(p, 'utf-8'); break; }
+    }
+    if (!sql) {
+      await prisma.$disconnect();
+      return res.status(500).json({ status: 'error', reason: 'Migration SQL not found', searched: paths });
+    }
+    const statements = sql.split(';').filter((s: string) => s.trim().length > 0);
+    for (const stmt of statements) {
+      await prisma.$executeRawUnsafe(stmt + ';');
+    }
+    await prisma.$disconnect();
+    res.json({ status: 'success', tablesCreated: statements.filter((s: string) => s.trim().toUpperCase().startsWith('CREATE TABLE')).length });
+  } catch (err) {
+    await prisma.$disconnect().catch(() => {});
+    res.status(500).json({ status: 'error', message: (err as Error).message });
+  }
 });
 
 import authRoutes from './routes/auth';
