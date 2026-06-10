@@ -13,15 +13,17 @@ app.get('/api/v1/health', (_req: any, res: any) => {
 });
 
 app.post('/api/v1/migrate', async (_req: any, res: any) => {
+  let client: any = null;
   try {
-    const client = new Client({ connectionString: process.env.DIRECT_URL || process.env.DATABASE_URL });
+    client = new Client({ connectionString: process.env.DIRECT_URL || process.env.DATABASE_URL });
     await client.connect();
-    const result = await client.query(
+    const dbResult = await client.query(`SELECT version()`);
+    const tableCheck = await client.query(
       `SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public' AND tablename = 'users'`
     );
-    if (result.rows.length > 0) {
+    if (tableCheck.rows.length > 0) {
       await client.end();
-      return res.json({ status: 'skipped', reason: 'Tables already exist' });
+      return res.json({ status: 'skipped', reason: 'Tables already exist', version: dbResult.rows[0].version });
     }
     const paths = [
       join(__dirname, '..', 'backend', 'prisma', 'migrations', '0001_init', 'migration.sql'),
@@ -34,13 +36,14 @@ app.post('/api/v1/migrate', async (_req: any, res: any) => {
     }
     if (!sql) {
       await client.end();
-      return res.status(500).json({ status: 'error', reason: 'Migration SQL not found', searched: paths });
+      return res.status(500).json({ status: 'error', reason: 'Migration SQL not found', searched: paths, cwd: process.cwd(), dirname: __dirname });
     }
     await client.query(sql);
     await client.end();
     res.json({ status: 'success', message: 'All tables created' });
   } catch (err: any) {
-    res.status(500).json({ status: 'error', message: err.message });
+    try { await client.end(); } catch {}
+    res.status(500).json({ status: 'error', message: err.message, code: err.code, stack: err.stack?.split('\n')?.slice(0, 3) });
   }
 });
 
