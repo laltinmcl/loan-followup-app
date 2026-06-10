@@ -7,9 +7,16 @@
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "cd backend && npm run dev",
     "dev:frontend": "cd frontend && npm run dev",
-    "build": "cd backend && npm run build && cd ../frontend && npm run build",
+    "build": "cd frontend && npm install && npm run build",
     "lint": "cd backend && npm run lint && cd ../frontend && npm run lint",
-    "test": "cd backend && npm test && cd ../frontend && npm test"
+    "test": "cd backend && npm test && cd ../frontend && npm test",
+    "postinstall": "cd backend && npm install"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "express-rate-limit": "^7.2.0",
+    "pg": "^8.21.0"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
