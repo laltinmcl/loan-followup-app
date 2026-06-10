@@ -8,3 +8,4 @@ uploads/*
 Thumbs.db
 
 .vercel
+.env*
