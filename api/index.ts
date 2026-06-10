@@ -62,7 +62,7 @@ app.post('/api/v1/seed', async (_req: any, res: any) => {
   }
 });
 
-app.post('/auth/login', async (req: any, res: any) => {
+app.post('/api/v1/auth/login', async (req: any, res: any) => {
   try {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
@@ -85,7 +85,7 @@ app.post('/auth/login', async (req: any, res: any) => {
   }
 });
 
-app.get('/auth/me', async (req: any, res: any) => {
+app.get('/api/v1/auth/me', async (req: any, res: any) => {
   try {
     const auth = req.headers.authorization;
     if (!auth) return res.status(401).json({ error: 'No token' });
