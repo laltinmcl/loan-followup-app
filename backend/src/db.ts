@@ -1,9 +1,10 @@
-import { PrismaClient as PrismaClientClass } from '@prisma/client';
+// Lazy import to avoid EROFS on Vercel serverless
+let PrismaClientClass: any;
+let _prisma: any;
 
-let _prisma: PrismaClientClass;
-
-function getPrisma(): PrismaClientClass {
+function getPrisma() {
   if (!_prisma) {
+    PrismaClientClass = require('@prisma/client').PrismaClient;
     _prisma = new PrismaClientClass({
       log: process.env.NODE_ENV === 'development' ? ['query'] : ['error'],
     });
@@ -11,10 +12,9 @@ function getPrisma(): PrismaClientClass {
   return _prisma;
 }
 
-// Proxy so route files can keep using `prisma.X` syntax
-const prisma = new Proxy({} as PrismaClientClass, {
+const prisma = new Proxy({} as any, {
   get(_, prop) {
-    return getPrisma()[prop as keyof PrismaClientClass];
+    return getPrisma()[prop];
   },
 });
 
