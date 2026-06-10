@@ -6,6 +6,7 @@ import multer from 'multer';
 import path from 'path';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import XLSX from 'xlsx';
 
 const app = express();
 app.use(cors());
@@ -347,16 +348,198 @@ app.get('/api/v1/activity', authMiddleware, async (req: any, res: any) => {
   }
 });
 
+function parseRowValue(v: any): string {
+  if (v === null || v === undefined) return '';
+  const s = String(v).replace(/^["']|["']$/g, '').trim();
+  return s;
+}
+
+function parseNumeric(v: any): number {
+  if (v === null || v === undefined) return 0;
+  const s = String(v).replace(/[$,]/g, '').replace(/^["']|["']$/g, '').trim();
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+
+function parseDate(v: any): string | null {
+  const s = parseRowValue(v);
+  if (!s) return null;
+  const cleaned = s.replace(/\./g, '/');
+  const parts = cleaned.split('/');
+  if (parts.length === 3) {
+    const y = parts[0].padStart(4, '0');
+    const m = parts[1].padStart(2, '0');
+    const d = parts[2].padStart(2, '0');
+    const iso = `${y}-${m}-${d}`;
+    return iso;
+  }
+  return null;
+}
+
+interface LoanRow {
+  account_no: string;
+  member_name: string;
+  member_code: string;
+  loan_category: string;
+  loan_type_code: number;
+  disburse_amount: number;
+  principal_due: number;
+  due_count: number;
+  interest_total: number;
+  loan_limit: number;
+  outstanding_amount: number;
+  total_due: number;
+  mobile_no: string;
+  guarantor_info: string;
+  loan_expiry_date: string | null;
+}
+
+function parseMemberName(raw: string): { name: string; code: string } {
+  const m = raw.match(/^(.+?)\s*\((\d+)\)\s*$/);
+  if (m) return { name: m[1].trim(), code: m[2] };
+  return { name: raw.trim(), code: '' };
+}
+
 // Import
 app.post('/api/v1/import', authMiddleware, upload.single('file'), async (req: any, res: any) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     const supabase = getSupabase();
-    const { data, error } = await supabase.from('import_jobs').insert({
-      id: crypto.randomUUID(), filename: req.file.originalname, file_path: req.file.path, status: 'pending', created_by: req.user.id,
-    }).select().single();
-    if (error) throw error;
-    res.status(201).json({ jobId: data.id, status: 'pending', message: 'File queued for import' });
+
+    const jobId = crypto.randomUUID();
+    const { error: jobErr } = await supabase.from('import_jobs').insert({
+      id: jobId, filename: req.file.originalname, file_path: req.file.path,
+      status: 'processing', total_rows: 0, success_rows: 0, error_rows: 0,
+      created_by: req.user.id,
+    });
+    if (jobErr) throw jobErr;
+
+    const workbook = XLSX.readFile(req.file.path);
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+    let currentCategory = '';
+    let currentTypeCode = 0;
+    const errors: string[] = [];
+    let totalRows = 0;
+    let successRows = 0;
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || !row[0]) continue;
+      const col1 = parseRowValue(row[0]);
+      const col2 = parseRowValue(row[1]);
+
+      // Detect section header (e.g., "Agriculture Loan (40)")
+      if (!col2 && col1 && !/^[0-9]/.test(col1) && !col1.startsWith('No.')) {
+        const catMatch = col1.match(/^(.+?)\s*\((\d+)\)\s*$/);
+        if (catMatch) {
+          currentCategory = catMatch[1].trim();
+          currentTypeCode = parseInt(catMatch[2]) || 0;
+        } else {
+          currentCategory = col1;
+          currentTypeCode = 0;
+        }
+        continue;
+      }
+
+      // Skip summary rows
+      if (col1.startsWith('No.') || col1.startsWith('no.')) continue;
+
+      // Must have account_no and member_name at minimum
+      if (!col1 || !col2) continue;
+
+      const parsedName = parseMemberName(col2);
+      const loan: LoanRow = {
+        account_no: col1,
+        member_name: parsedName.name,
+        member_code: parsedName.code,
+        loan_category: currentCategory,
+        loan_type_code: currentTypeCode,
+        disburse_amount: parseNumeric(row[3]),
+        principal_due: parseNumeric(row[4]),
+        due_count: parseInt(parseRowValue(row[5]).replace(/[$,]/g, '')) || 0,
+        interest_total: parseNumeric(row[6]),
+        loan_limit: parseNumeric(row[7]),
+        outstanding_amount: parseNumeric(row[8]),
+        total_due: parseNumeric(row[9]),
+        mobile_no: parseRowValue(row[10]),
+        guarantor_info: parseRowValue(row[11]),
+        loan_expiry_date: parseDate(row[2]),
+      };
+      totalRows++;
+
+      try {
+        const loanId = crypto.randomUUID();
+        const { error: insErr } = await supabase.from('loans').insert({
+          id: loanId,
+          account_no: loan.account_no,
+          member_name: loan.member_name,
+          member_code: loan.member_code,
+          loan_category: loan.loan_category,
+          loan_type_code: loan.loan_type_code || null,
+          disburse_amount: loan.disburse_amount,
+          principal_due: loan.principal_due,
+          due_count: loan.due_count,
+          interest_total: loan.interest_total,
+          loan_limit: loan.loan_limit,
+          outstanding_amount: loan.outstanding_amount,
+          total_due: loan.total_due || null,
+          mobile_no: loan.mobile_no || null,
+          guarantor_info: loan.guarantor_info || null,
+          loan_expiry_date: loan.loan_expiry_date,
+          status: 'active',
+          created_by: req.user.id,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+        if (insErr) {
+          errors.push(`Row ${i + 1} (${loan.account_no}): ${insErr.message}`);
+          continue;
+        }
+
+        await supabase.from('followup_stages').insert({
+          id: crypto.randomUUID(),
+          loan_id: loanId,
+          current_stage: 'import',
+          stage_entered_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+
+        await supabase.from('activity_log').insert({
+          id: crypto.randomUUID(),
+          loan_id: loanId,
+          action: 'loan_imported',
+          description: `Loan imported from ${req.file.originalname}`,
+          created_by: req.user.id,
+          metadata: { source: 'excel_import', filename: req.file.originalname },
+        });
+
+        successRows++;
+      } catch (rowErr: any) {
+        errors.push(`Row ${i + 1} (${loan.account_no}): ${rowErr.message}`);
+      }
+    }
+
+    await supabase.from('import_jobs').update({
+      status: successRows > 0 ? 'completed' : 'failed',
+      total_rows: totalRows,
+      success_rows: successRows,
+      error_rows: errors.length,
+      errors_json: errors.length > 0 ? errors : null,
+      completed_at: new Date().toISOString(),
+    }).eq('id', jobId);
+
+    res.status(201).json({
+      jobId,
+      status: successRows > 0 ? 'completed' : 'failed',
+      totalRows,
+      successRows,
+      errorRows: errors.length,
+      message: `Imported ${successRows} of ${totalRows} loans`,
+      errors: errors.length > 0 ? errors.slice(0, 10) : undefined,
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
